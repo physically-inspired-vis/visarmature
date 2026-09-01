@@ -560,6 +560,29 @@ export default function App() {
     setModalMode('none')
   }
 
+  // Open a scene named by ?scene=<path>, so a gallery elsewhere on this site can
+  // embed a participant's result. Same-origin only: this parameter must never
+  // make the app fetch arbitrary URLs on a visitor's behalf.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('scene')
+    if (!param) return
+    let url: URL
+    try { url = new URL(param, window.location.href) } catch { return }
+    if (url.origin !== window.location.origin) return
+    let cancelled = false
+    fetch(url.href)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((json) => {
+        if (cancelled) return
+        const data = json && typeof json === 'object' && 'data' in json ? json.data : json
+        const name = decodeURIComponent(url.pathname.split('/').pop() ?? '').replace(/\.json$/i, '')
+        handleLoad({ id: 'scene', name: name || 'Scene', createdAt: '', data })
+      })
+      .catch((err) => console.warn('Could not open ?scene=' + param, err))
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function handleDeleteSave(id: string) {
     const saves = loadSaves().filter((s) => s.id !== id)
     persistSaves(saves)
