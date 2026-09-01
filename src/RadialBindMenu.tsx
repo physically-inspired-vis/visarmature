@@ -1,0 +1,397 @@
+import React, { useEffect, useState } from 'react'
+import { DataBindings, DataVariable, CompositionLevel, LabelSlots, CollectionArrangement } from './types'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface BindOption {
+  action: 'bind'
+  bindKey: keyof DataBindings
+  label: string
+  icon: string
+  section: 'mark' | 'collection'
+}
+
+interface LabelOption {
+  action: 'label'
+  label: string
+  icon: string
+  section: 'mark' | 'collection'
+}
+
+type MenuOption = BindOption | LabelOption
+
+// ── Layout helpers ─────────────────────────────────────────────────────────────
+
+const RADIUS  = 110
+const BTN     = 46
+
+function arcPositions(n: number, centerDeg: number, spreadDeg: number, r: number) {
+  return Array.from({ length: n }, (_, i) => {
+    const deg = n === 1
+      ? centerDeg
+      : centerDeg - spreadDeg / 2 + (spreadDeg / (n - 1)) * i
+    const rad = (deg * Math.PI) / 180
+    return { x: Math.cos(rad) * r, y: Math.sin(rad) * r }
+  })
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface RadialBindMenuProps {
+  x:               number
+  y:               number
+  varName:         DataVariable
+  varType:         'numerical' | 'categorical'
+  level:           CompositionLevel
+  col1Arrangement: CollectionArrangement
+  markIsCompound?: boolean   // compound marks own their shapes → geometry encoding is disabled
+  onBind:          (attr: keyof DataBindings, variable: DataVariable) => void
+  onColorBind:     (variable: DataVariable, mode: 'distinct' | 'continuous') => void
+  onBindLabel:     (section: 'mark' | 'collection', variable: DataVariable, position: keyof LabelSlots) => void
+  onClose:         () => void
+}
+
+// ── Sub-step card ─────────────────────────────────────────────────────────────
+
+const cardStyle: React.CSSProperties = {
+  position: 'fixed',
+  background: '#fff',
+  borderRadius: '14px',
+  boxShadow: '0 6px 28px rgba(0,0,0,0.22)',
+  padding: '12px 14px',
+  zIndex: 1002,
+  pointerEvents: 'all',
+  minWidth: '150px',
+}
+
+const subBtnBase: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '8px',
+  width: '100%', textAlign: 'left',
+  background: '#F2F2F7', border: '1px solid #E5E5EA',
+  borderRadius: '8px', padding: '8px 12px',
+  fontSize: '12px', fontWeight: '500', color: '#1D1D1F',
+  cursor: 'pointer', fontFamily: 'inherit',
+  transition: 'background 0.12s',
+}
+
+function CardHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: '10px', color: '#AEAEB2', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>
+      {children}
+    </div>
+  )
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function RadialBindMenu({
+  x, y, varName, varType, level, col1Arrangement, markIsCompound, onBind, onColorBind, onBindLabel, onClose,
+}: RadialBindMenuProps) {
+
+  type Step = 'radial' | 'colorMode' | 'labelPos'
+  const [step, setStep] = useState<Step>('radial')
+  const [pendingSection, setPendingSection] = useState<'mark' | 'collection'>('mark')
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (step !== 'radial') setStep('radial')
+        else onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [step, onClose])
+
+  // ── Declarative mapping rules ─────────────────────────────────────────────
+  // Each rule specifies which variable types and arrangements it applies to.
+  // Options are filtered at render time against the current context.
+  type BindRule = {
+    action:       'bind'
+    bindKey:      keyof DataBindings
+    label:        string
+    icon:         string
+    section:      'mark' | 'collection'
+    varTypes:     Array<'numerical' | 'categorical'>
+    arrangements?: CollectionArrangement[]  // undefined = all arrangements
+    minLevel?:    number
+  }
+  type LabelRule = {
+    action:        'label'
+    label:         string
+    icon:          string
+    section:       'mark' | 'collection'
+    varTypes:      Array<'numerical' | 'categorical'>
+    arrangements?: CollectionArrangement[]
+    minLevel?:     number
+    excludeArrangements?: CollectionArrangement[]
+  }
+  type Rule = BindRule | LabelRule
+
+  const RULES: Rule[] = [
+    // ── Mark ──
+    { action: 'bind',  bindKey: 'markColor',    label: 'Color',    icon: '●',  section: 'mark',       varTypes: ['numerical', 'categorical'] },
+    { action: 'bind',  bindKey: 'markGeometry', label: 'Geometry', icon: '◆',  section: 'mark',       varTypes: ['categorical'] },
+    { action: 'bind',  bindKey: 'markSizeX',    label: 'Width',    icon: 'X',  section: 'mark',       varTypes: ['numerical'] },
+    { action: 'bind',  bindKey: 'markSizeY',    label: 'Height',   icon: 'Y',  section: 'mark',       varTypes: ['numerical'] },
+    { action: 'bind',  bindKey: 'markSizeZ',    label: 'Depth',    icon: 'Z',  section: 'mark',       varTypes: ['numerical'] },
+    { action: 'bind',  bindKey: 'markScale',    label: 'Scale',    icon: '⤢',  section: 'mark',       varTypes: ['numerical'] },
+    { action: 'label',                           label: 'Label',    icon: 'Aa', section: 'mark',       varTypes: ['numerical', 'categorical'] },
+    // ── Collection ──
+    { action: 'bind',  bindKey: 'scatterSize',  label: 'Scatter Size',  icon: '⊞', section: 'collection', varTypes: ['numerical'],               arrangements: ['scattering'], minLevel: 2 },
+    { action: 'bind',  bindKey: 'scatterCount', label: 'Population', icon: '#',  section: 'collection', varTypes: ['numerical'],               arrangements: ['scattering', 'stacking', 'adjacent', 'surface'], minLevel: 2 },
+    { action: 'label',                           label: 'Label',              icon: 'Aa', section: 'collection', varTypes: ['numerical', 'categorical'],                             minLevel: 3 },
+  ]
+
+  function ruleMatches(r: Rule): boolean {
+    if (!r.varTypes.includes(varType)) return false
+    // A compound mark defines its own sub-shapes, so geometry encoding can't apply.
+    if (markIsCompound && r.action === 'bind' && r.bindKey === 'markGeometry') return false
+    if (r.minLevel !== undefined && level < r.minLevel) return false
+    if ('arrangements' in r && r.arrangements !== undefined && !r.arrangements.includes(col1Arrangement)) return false
+    if ('excludeArrangements' in r && r.excludeArrangements?.includes(col1Arrangement)) return false
+    return true
+  }
+
+  // Section layout: 'sides' = Mark-left / Collection-right (original design);
+  // 'stacked' = Mark-top / Collection-bottom. Flip this one flag to switch back —
+  // both layouts are kept so it's a trivial revert.
+  const MENU_LAYOUT = 'stacked' as 'sides' | 'stacked'
+
+  // Order the mark options so they read Scale, X, Y, Z, Color, Geometry, Label —
+  // top→bottom on the vertical (sides) arc, left→right on the horizontal (stacked).
+  const MARK_ORDER = ['Scale', 'Width', 'Height', 'Depth', 'Color', 'Geometry', 'Label']
+  const markRank = (o: MenuOption) => { const i = MARK_ORDER.indexOf(o.label); return i === -1 ? MARK_ORDER.length : i }
+  const markSorted = (RULES.filter(r => r.section === 'mark' && ruleMatches(r)) as MenuOption[]).sort((a, b) => markRank(a) - markRank(b))
+  // The vertical arc places index 0 at the BOTTOM, so reverse for 'sides'; the
+  // horizontal arc places index 0 at the LEFT, so keep order for 'stacked'.
+  const markOpts: MenuOption[] = MENU_LAYOUT === 'sides' ? [...markSorted].reverse() : markSorted
+  const colOpts:  MenuOption[] = RULES.filter(r => r.section === 'collection' && ruleMatches(r)) as MenuOption[]
+
+  // Arc centre per layout: Mark left(180°)/top(270°), Collection right(0°)/bottom(90°).
+  const markCenterDeg = MENU_LAYOUT === 'sides' ? 180 : 270
+  const colCenterDeg  = MENU_LAYOUT === 'sides' ?   0 :  90
+  // Wider spread on the mark side: up to 6 options need room so buttons don't overlap.
+  const markSpread = markOpts.length > 3 ? 150 : 90
+  const markPos = arcPositions(markOpts.length, markCenterDeg, markSpread, RADIUS)
+  const colPos  = arcPositions(colOpts.length,  colCenterDeg,  70, RADIUS)
+
+  const allItems = [
+    ...markOpts.map((o, i) => ({ opt: o, pos: markPos[i] })),
+    ...colOpts.map((o, i)  => ({ opt: o, pos: colPos[i] })),
+  ]
+
+  // Section labels: plain text just inside the arc, centred on the group.
+  const LABEL_INSET = RADIUS * 0.3
+  const sectionLabel: React.CSSProperties = {
+    position: 'absolute', fontSize: '13px', fontWeight: '700',
+    letterSpacing: '0.1em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+    transform: 'translate(-50%, -50%)',
+  }
+  const markLabelPos: React.CSSProperties = MENU_LAYOUT === 'sides'
+    ? { left: -LABEL_INSET, top: 0 }
+    : { left: 0, top: -LABEL_INSET }
+  const colLabelPos: React.CSSProperties = MENU_LAYOUT === 'sides'
+    ? { left: LABEL_INSET, top: 0 }
+    : { left: 0, top: LABEL_INSET }
+  const dividerStyle: React.CSSProperties = MENU_LAYOUT === 'sides'
+    ? { left: 0, top: -(RADIUS + 20), width: '1px', height: (RADIUS + 20) * 2, transform: 'translateX(-50%)' }
+    : { top: 0, left: -(RADIUS + 20), height: '1px', width: (RADIUS + 20) * 2, transform: 'translateY(-50%)' }
+
+  function handleSelect(opt: MenuOption) {
+    if (opt.action === 'bind' && opt.bindKey === 'markColor') {
+      setPendingSection('mark')
+      setStep('colorMode')
+      return
+    }
+    if (opt.action === 'label') {
+      setPendingSection(opt.section)
+      setStep('labelPos')
+      return
+    }
+    if (opt.action === 'bind') {
+      onBind(opt.bindKey, varName)
+    }
+    onClose()
+  }
+
+  const hasCollection = colOpts.length > 0
+
+  // ── Sub-step: Color mode card ──────────────────────────────────────────────
+
+  if (step === 'colorMode') {
+    return (
+      <>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000 }} onClick={() => setStep('radial')} />
+        <div style={{ ...cardStyle, left: x - 75, top: y - 70 }}>
+          <CardHeader>Color mode</CardHeader>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <button
+              style={subBtnBase}
+              onClick={() => { onColorBind(varName, 'distinct'); onClose() }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#E5E5EA')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#F2F2F7')}
+            >
+              <span style={{ fontSize: '14px' }}>◈</span> Distinct
+            </button>
+            <button
+              style={subBtnBase}
+              onClick={() => { onColorBind(varName, 'continuous'); onClose() }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#E5E5EA')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#F2F2F7')}
+            >
+              <span style={{ fontSize: '14px' }}>▬</span> Continuous
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── Sub-step: Label position card ─────────────────────────────────────────
+
+  if (step === 'labelPos') {
+    const btnStyle: React.CSSProperties = {
+      ...subBtnBase,
+      justifyContent: 'center',
+      width: '88px', height: '34px',
+      padding: '0 8px',
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+    }
+    const posBtn = (key: keyof LabelSlots, icon: string, label: string) => (
+      <button
+        key={key}
+        style={btnStyle}
+        onClick={() => { onBindLabel(pendingSection, varName, key); onClose() }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#E5E5EA')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#F2F2F7')}
+      >
+        {icon} {label}
+      </button>
+    )
+    // Scattered marks float in 3D, so only top / below make sense — and each
+    // side accepts two values (App fills the paired slot), shown side by side.
+    const scatterMark = pendingSection === 'mark' && col1Arrangement === 'scattering'
+    // Surface marks always label above (along the normal); each pick adds another value.
+    const surfaceMark = pendingSection === 'mark' && col1Arrangement === 'surface'
+    return (
+      <>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000 }} onClick={() => setStep('radial')} />
+        <div style={{ ...cardStyle, left: x - 100, top: y - 110 }}>
+          <CardHeader>Label position</CardHeader>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            {surfaceMark ? (
+              posBtn('top', '↑', 'Above')
+            ) : scatterMark ? (
+              <>
+                {posBtn('top', '↑', 'Top')}
+                {posBtn('bottom', '↓', 'Below')}
+              </>
+            ) : (
+              <>
+                {posBtn('top', '↑', 'Top')}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {posBtn('left',  '←', 'Left')}
+                  {posBtn('right', '→', 'Right')}
+                </div>
+                {posBtn('bottom', '↓', 'Bottom')}
+              </>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── Main radial menu ──────────────────────────────────────────────────────
+
+  return (
+    <>
+      {/* Click-away backdrop */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1000 }} onClick={onClose} />
+
+      {/* Menu root — zero-size anchor at drop point */}
+      <div style={{
+        position: 'fixed', left: x, top: y,
+        transform: 'translate(-50%, -50%)',
+        width: 0, height: 0,
+        zIndex: 1001, pointerEvents: 'none',
+      }}>
+
+        {/* Divider between Mark and Collection */}
+        {hasCollection && (
+          <div style={{ position: 'absolute', background: '#E5E5EA', ...dividerStyle }} />
+        )}
+
+        {/* Section label: Mark */}
+        <div style={{ ...sectionLabel, color: '#007AFF', ...markLabelPos }}>
+          Mark
+        </div>
+
+        {/* Section label: Collection */}
+        {hasCollection && (
+          <div style={{ ...sectionLabel, color: '#0D9488', ...colLabelPos }}>
+            Collection
+          </div>
+        )}
+
+        {/* Center pip */}
+        <div style={{
+          position: 'absolute',
+          width: 10, height: 10,
+          background: '#fff', borderRadius: '50%',
+          transform: 'translate(-50%, -50%)',
+        }} />
+
+        {/* Option buttons */}
+        {allItems.map(({ opt, pos }, i) => {
+          const isCollection = opt.section === 'collection'
+          const accent = isCollection ? '#0D9488' : '#007AFF'
+          return (
+            <button
+              key={i}
+              onClick={() => handleSelect(opt)}
+              style={{
+                position: 'absolute',
+                left: pos.x, top: pos.y,
+                transform: 'translate(-50%, -50%)',
+                width: BTN, height: BTN,
+                background: '#fff',
+                border: `2px solid ${accent}`,
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: '1px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
+                pointerEvents: 'all',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.transform = 'translate(-50%, -50%) scale(1.13)'
+                el.style.boxShadow = `0 6px 20px rgba(0,0,0,0.22)`
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.transform = 'translate(-50%, -50%)'
+                el.style.boxShadow = '0 4px 16px rgba(0,0,0,0.16)'
+              }}
+            >
+              <span style={{ fontSize: opt.label === 'Scale' ? '19px' : '14px', color: accent, lineHeight: 1 }}>{opt.icon}</span>
+              {/* A multi-word long label (e.g. "Scatter Size") wraps onto two rows at a
+                  readable size; a long single word (Population) shrinks to fit one row. */}
+              <span style={{
+                fontSize: opt.label.length > 8 && !opt.label.includes(' ') ? '7px' : '8px',
+                color: '#6C6C70', fontWeight: '600', lineHeight: 1.15, textAlign: 'center',
+                maxWidth: opt.label.length > 8 && opt.label.includes(' ') ? BTN - 4 : undefined,
+              }}>
+                {opt.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
