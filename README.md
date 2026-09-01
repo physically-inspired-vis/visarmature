@@ -12,7 +12,7 @@ npm run dev
 ## Deployment
 
 Pushing to `main` builds the site and publishes it to
-<https://physically-inspired-vis.github.io/VisArmature/> via GitHub Actions.
+<https://physically-inspired-vis.github.io/visarmature/> via GitHub Actions.
 
 Build-time configuration comes from repository secrets:
 
