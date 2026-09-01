@@ -602,6 +602,11 @@ export default function App() {
     if (level === 2) { setLevel(1); setActiveElement('mark') }
   }
 
+  // ?viewer=1 strips the editing chrome and leaves the scene alone, for embedding
+  // the composition somewhere that only wants to show it (the study gallery).
+  const viewerOnly = new URLSearchParams(window.location.search).get('viewer') === '1'
+  const hiddenWhenViewing = viewerOnly ? { display: 'none' } : null
+
   return (
     <div style={{
       display: 'flex', width: '100vw', height: '100vh',
@@ -614,6 +619,7 @@ export default function App() {
         borderRight: '1px solid #E5E5EA',
         background: '#FFFFFF',
         display: 'flex', flexDirection: 'column',
+        ...hiddenWhenViewing,
         overflow: 'hidden',
       }}>
 
@@ -827,6 +833,7 @@ export default function App() {
         borderLeft: '1px solid #E5E5EA',
         background: '#FFFFFF',
         display: 'flex', flexDirection: 'column',
+        ...hiddenWhenViewing,
       }}>
 
         {/* Scrollable properties */}
