@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useState, useCallback, Suspense, createContext, useContext } from 'react'
+import { useRef, useMemo, useEffect, useState, useCallback, Suspense, createContext, useContext, Component, type ReactNode } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, Environment, Sky, Stars, Grid, Html, useGLTF, PivotControls } from '@react-three/drei'
 import {
@@ -298,7 +298,35 @@ function SpatialHandle({ target, position, orientation, groupRef, children }: {
   )
 }
 
-function CustomModelMesh({
+// A model that cannot be fetched or parsed must not take the scene with it.
+// useGLTF throws on a failed load, and an unguarded throw inside the Canvas
+// unmounts the whole tree - the scene appears, then the page goes blank. This
+// boundary drops just the offending model and leaves everything else standing.
+class ModelErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(err: unknown) { console.warn('Skipping a model that failed to load:', err) }
+  render() { return this.state.failed ? null : this.props.children }
+}
+
+type CustomModelMeshProps = {
+  url:      string
+  material: string
+  color:    string
+  sz:       [number, number, number]
+  recolor?: boolean
+  tint?:    boolean
+}
+
+function CustomModelMesh(props: CustomModelMeshProps) {
+  return (
+    <ModelErrorBoundary key={props.url}>
+      <CustomModelMeshInner {...props} />
+    </ModelErrorBoundary>
+  )
+}
+
+function CustomModelMeshInner({
   url, material, color, sz, recolor = false, tint = false,
 }: {
   url:      string

@@ -12,7 +12,7 @@ import { SceneSave, SaveDialog, LoadDialog, loadSaves, persistSaves, captureThum
 import { submitStudySession, getParticipantId, studyConfigured } from './studySave'
 import { LeftDataPanel, VarChip, DatasetReferenceCard, datasetModelCollection } from './LeftDataPanel'
 import { RadialBindMenu } from './RadialBindMenu'
-import { resolveCustomModel, MASTER_COLLECTION, modelsForCollection } from './models'
+import { resolveCustomModel, resolveAllModels, MASTER_COLLECTION, modelsForCollection } from './models'
 
 // ── Data variable definitions ─────────────────────────────────────────────────
 
@@ -459,8 +459,11 @@ export default function App() {
   }
 
   function handleLoad(save: SceneSave) {
+    // Re-resolve every custom model in the scene up front: a save carries the
+    // asset URLs of the build that exported it, which 404 under a different
+    // base, and a failed model load takes the whole canvas down.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = save.data as any
+    const d = resolveAllModels(save.data) as any
     if (d.level          != null) setLevel(d.level)
     if (d.activeElement  != null) setActiveElement(d.activeElement)
     const rawMark = resolveCustomModel(d.markConfig ?? DEFAULT_MARK)
