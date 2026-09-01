@@ -481,7 +481,10 @@ export default function App() {
     const usedDecIds = new Set<string>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const migrateCollectionObj = (cfg: any): CollectionConfig => {
-      if (!cfg || cfg.object) return cfg
+      if (!cfg) return cfg
+      // A collection's own object can be a custom model too, so it needs the same
+      // re-resolution as the mark and the decorations.
+      if (cfg.object) return { ...cfg, object: resolveCustomModel(cfg.object) }
       const refId = cfg.surfaceTargetId || cfg.scatterExclusionId
       if (!refId) return cfg
       const dec = resolvedDecs.find((dd) => dd.id === refId)
