@@ -656,7 +656,7 @@ function SingleMarkMesh({ config, layers, bindings, markLabelConfig }: {
         </group>
       ) : config.shape === 'custom' && config.customModelUrl ? (
         <Suspense fallback={null}>
-          <CustomModelMesh url={config.customModelUrl} material={config.material} color={color} sz={[s * sz.x, s * sz.y, s * sz.z]} recolor={bindings.markColor !== null} tint={colorTint} />
+          <CustomModelMesh url={config.customModelUrl} material={config.material} color={color} sz={[s * sz.x, s * sz.y, s * sz.z]} recolor={bindings.markColor !== null || bindings.collectionColor !== null} tint={colorTint} />
         </Suspense>
       ) : (
         <mesh geometry={geo} scale={[s * sz.x, s * sz.y, s * sz.z]}>
@@ -726,7 +726,9 @@ function AlignedMarks({
   const { colorMode, colorGradient, colorTint } = useContext(ColorContext)
   const bScale = useContext(BindingScaleContext)
   const { fontSize: labelFontSize, distance: labelDistance, bold: labelBold, italic: labelItalic, color: labelColor } = useContext(LabelStyleContext)
-  const recolor = bindings.markColor !== null   // colour encoding active → recolour custom models too
+  // A colour encoding is active - on the mark or on the collection it sits in -
+  // so custom models are recoloured too instead of keeping their own material.
+  const recolor = bindings.markColor !== null || bindings.collectionColor !== null
 
   function getColor(i: number) {
     return resolveMarkColor(i, bindings, layers, color, colorMode, colorGradient)
@@ -1142,6 +1144,15 @@ function Level3Content({
   } = collection2Config
   const bScale = useContext(BindingScaleContext)
   const scatterSizeScale = bScaleOf(bScale, 'scatterSize')
+  const { colorMode: l3Mode, colorGradient: l3Gradient } = useContext(ColorContext)
+  // With a Color encoding on the collection, every mark in a collection takes
+  // that collection's colour, instead of each mark cycling through the palette.
+  const groupColor = (i: number) => (
+    bindings.collectionColor === null
+      ? (markConfig.color ?? col2Color)
+      : resolveMarkColor(i, { ...bindings, markColor: bindings.collectionColor }, layers,
+                         markConfig.color ?? col2Color, l3Mode, l3Gradient)
+  )
 
   const groupCount = layers.length || alignCount
 
@@ -1152,7 +1163,7 @@ function Level3Content({
         return {
           // Base colour is the mark's own colour; per-category colour is applied
           // downstream by resolveMarkColor only when a markColor encoding is set.
-          color: markConfig.color  ?? col2Color,
+          color: groupColor(i),
           name:  layer?.name       ?? `Group ${i + 1}`,
           pct:   layer?.percentage ?? 0,
         }
@@ -1232,7 +1243,7 @@ function Level3Content({
           (Math.random() - 0.5) * scatterDimensions.y * 0.8,
           (Math.random() - 0.5) * scatterDimensions.z * 0.8,
         ] as [number, number, number],
-        color:    markConfig.color  ?? col2Color,
+        color:    groupColor(i),
         name:     layer?.name       ?? `Group ${i + 1}`,
         pct:      layer?.percentage ?? 0,
         perpExt:  0,
@@ -1242,6 +1253,7 @@ function Level3Content({
     arrangement, groupCount, alignAxis, alignSpacing, alignAnchor,
     scatterCount, scatterDimensions.x, scatterDimensions.y, scatterDimensions.z,
     layers, col2Color, bindings.scatterSize, scatterSizeScale,
+    bindings.collectionColor, l3Mode, l3Gradient.from, l3Gradient.to,
     collection1Config.arrangement, collection1Config.alignAxis,
     collection1Config.alignCount, collection1Config.alignSpacing,
     collection1Config.scatterDimensions.x, collection1Config.scatterDimensions.y,

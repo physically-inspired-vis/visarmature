@@ -169,6 +169,7 @@ export type DataVariable = 'numerical' | 'categorical' | 'weight' | 'garbageType
 
 export interface DataBindings {
   markColor:     DataVariable | null
+  collectionColor: DataVariable | null  // colours each collection as a whole, not each mark
   markGeometry:  DataVariable | null  // activates per-category geometry encoding
   scatterSize:   DataVariable | null
   scatterCount:  DataVariable | null  // uses data value as scatter particle count

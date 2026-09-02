@@ -18,6 +18,7 @@ import { resolveCustomModel, resolveAllModels, MASTER_COLLECTION, modelsForColle
 
 const BINDING_LABELS: Record<keyof DataBindings, string> = {
   markColor:    'Color',
+  collectionColor: 'Collection Color',
   markGeometry: 'Geometry',
   scatterSize:  'Scatter Size',
   scatterCount: 'Population',
@@ -100,6 +101,7 @@ function ScaleInput({ value, disabled, onCommit }: { value: number; disabled: bo
 
 const BINDING_LEVEL: Record<keyof DataBindings, string> = {
   markColor:    '',
+  collectionColor: 'Lv3',
   markGeometry: '',
   markSizeX:    '',
   markSizeY:    '',
@@ -210,7 +212,7 @@ export default function App() {
   ]
 
   const [bindings,        setBindings]        = useState<DataBindings>({
-    markColor: null, markGeometry: null, scatterSize: null, scatterCount: null,
+    markColor: null, collectionColor: null, markGeometry: null, scatterSize: null, scatterCount: null,
     c1AlignCount: null, c2AlignCount: null,
     markSizeX: null, markSizeY: null, markSizeZ: null, markScale: null,
   })
@@ -513,6 +515,7 @@ export default function App() {
     const rawBindings = d.bindings ?? {}
     setBindings({
       markColor:    migrateVar(rawBindings.markColor    ?? null),
+      collectionColor: migrateVar(rawBindings.collectionColor ?? null),
       markGeometry: migrateVar(rawBindings.markGeometry ?? null),
       scatterSize:  migrateVar(rawBindings.scatterSize  ?? null),
       scatterCount: migrateVar(rawBindings.scatterCount ?? null),

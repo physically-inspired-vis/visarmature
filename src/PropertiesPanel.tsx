@@ -1105,6 +1105,30 @@ function CollectionProperties({
           </select>
         </Row>
 
+        {/* Colour the collections themselves, rather than each mark inside them.
+            Only meaningful at level 3, where this collection groups the others. */}
+        {isL2 && compositionLevel === 3 && (
+          <Row label="Color">
+            {bindings.collectionColor !== null ? (
+              <BoundChip
+                variable={bindings.collectionColor}
+                onClear={() => onBind('collectionColor', null)}
+              />
+            ) : (
+              <DropZone accepts="any" onDrop={(v) => onBind('collectionColor', v as DataVariable)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '2px' }}>
+                  <input
+                    type="color" value={config.color}
+                    onChange={(e) => onChange({ ...config, color: e.target.value })}
+                    style={{ width: '36px', height: '32px', border: '1px solid #D1D1D6', borderRadius: '6px', background: 'none', cursor: 'pointer', padding: '2px' }}
+                  />
+                  <span style={{ fontSize: '12px', color: '#8E8E93', fontFamily: 'monospace' }}>{config.color}</span>
+                </div>
+              </DropZone>
+            )}
+          </Row>
+        )}
+
         {/* ── Alignment controls ── */}
         {config.arrangement === 'alignment' && (
           <>
